@@ -52,6 +52,21 @@ export function exportDialog(app: App) {
   ]);
 }
 
+async function copySelection(app: App) {
+  const text = app.selectionClip();
+  if (!text) { toast('Wähle zuerst mit dem Box-Werkzeug (G) einen Bereich aus.', 'info'); return; }
+  try { await navigator.clipboard.writeText(text); toast('Auswahl kopiert – mit Strg+V einfügen.', 'ok', 2600); }
+  catch { modal('Auswahl als JSON', [h('textarea', { class: 'input', rows: 8, readOnly: true }, text)]); }
+}
+
+async function pasteFromClipboard(app: App) {
+  try { app.pasteText(await navigator.clipboard.readText()); return; } catch { /* no clipboard permission */ }
+  const input = h('textarea', { class: 'input', rows: 8, placeholder: 'Hier mit Strg+V einfügen …' });
+  modal('Struktur einfügen', [h('p', { class: 'muted', style: 'margin-top:0' }, 'Der Browser erlaubt keinen direkten Zugriff auf die Zwischenablage. Füge das Struktur-JSON hier ein:'), input],
+    [{ label: 'Abbrechen' }, { label: 'Einfügen', primary: true, run: () => app.pasteText(input.value) }]);
+  setTimeout(() => input.focus(), 50);
+}
+
 export function helpDialog() {
   const row = (a: string, b: string) => h('div', null, h('span', null, a), h('span', { class: 'muted', html: b }));
   modal('Steuerung & Tipps', [
@@ -69,6 +84,9 @@ export function helpDialog() {
       row('Füllen / Leeren', '<kbd>Enter</kbd> / <kbd>Entf</kbd>'), row('Abbrechen', '<kbd>Esc</kbd>'),
       h('h4', null, 'Ebenen & Dateien'),
       row('Ebene hoch / runter', '<kbd>Bild↑</kbd> <kbd>Bild↓</kbd>'), row('Öffnen / Exportieren', '<kbd>Strg</kbd>+<kbd>O</kbd> / <kbd>Strg</kbd>+<kbd>S</kbd>'),
+      row('Auswahl kopieren / Einfügen', '<kbd>Strg</kbd>+<kbd>C</kbd> / <kbd>Strg</kbd>+<kbd>V</kbd> (am Cursor)'),
+      h('h4', null, 'Redstone'),
+      row('Knopf drücken / Hebel umlegen', '<kbd>Klick</kbd> im Ansehen-Modus'), row('Abspielen, Tempo, Klänge', 'Seitenleiste → Simulation'),
     ),
     h('p', { class: 'small muted', style: 'margin-top:14px' }, 'Dateien (.litematic, .schem, .nbt, Minecraft-.jar, Resourcepacks) kannst du auch einfach ins Fenster ziehen. Alles läuft lokal in deinem Browser – nichts wird hochgeladen.'),
     h('p', { class: 'small muted' }, 'Blockdaten: minecraft-data (MIT). LiteCraft ist kein offizielles Minecraft-Produkt und steht in keiner Verbindung zu Mojang oder Microsoft.'),
@@ -132,6 +150,9 @@ export function buildTopbar(app: App, toggles: { left: () => void; right: () => 
     }),
     item('open', 'Öffnen…', () => fileInput.click(), '.litematic · .schem · .nbt', 'Strg O'),
     item('download', 'Exportieren…', () => exportDialog(app), '.litematic oder .schem', 'Strg S'),
+    'sep',
+    item('copy', 'Auswahl kopieren', () => void copySelection(app), 'Box-Auswahl als Struktur-JSON', 'Strg C'),
+    item('clipboard', 'Einfügen', () => void pasteFromClipboard(app), 'Struktur-JSON, z. B. vom Notenblock-Generator', 'Strg V'),
     'sep',
     item('link', 'Link zum Teilen kopieren', async () => {
       const url = await app.shareLink();

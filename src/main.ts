@@ -4,6 +4,7 @@ import { Editor } from './editor/editor';
 import { buildDock } from './ui/dock';
 import { h, toast } from './ui/dom';
 import { buildPalette, buildRightPanel } from './ui/panels';
+import { buildRedstoneHud } from './ui/redstone';
 import { simTab } from './ui/simtab';
 import { buildTopbar, exportDialog, helpDialog, texturesDialog } from './ui/topbar';
 
@@ -34,6 +35,7 @@ const topbar = buildTopbar(app, {
   right: () => { rightOpen = !rightOpen; if (narrow() && rightOpen) leftOpen = false; applyPanels(); },
 });
 const dock = buildDock(app);
+const redstoneHud = buildRedstoneHud(app);
 
 const drop = h('div', { class: 'drop-overlay' }, h('div', null, 'Datei hier ablegen', h('small', null, '.litematic · .schem · .nbt · Minecraft-.jar · Resourcepack-.zip')));
 let dragDepth = 0;
@@ -47,7 +49,7 @@ window.addEventListener('drop', (e) => {
   if (e.dataTransfer?.files.length) void app.importFiles(e.dataTransfer.files);
 });
 
-root.append(topbar, left, right, ...dock.elements, drop);
+root.append(topbar, left, right, ...dock.elements, redstoneHud.el, drop);
 applyPanels();
 window.addEventListener('resize', applyPanels);
 
@@ -63,6 +65,7 @@ const loop = () => {
     editor.update();
     app.view.frame();
     dock.frame();
+    redstoneHud.frame();
   } catch (e) {
     if (!reported) { reported = true; console.error(e); toast(`Interner Fehler: ${(e as Error).message}`, 'error', 8000); }
   }

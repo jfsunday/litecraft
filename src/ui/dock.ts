@@ -26,7 +26,7 @@ export function buildDock(app: App): { elements: HTMLElement[]; frame: () => voi
   // ---- status line
   const status = h('div', { class: 'status glass' });
   const HINTS: Record<Mode, string> = {
-    view: 'Linke Maus: drehen · Rechte Maus: verschieben · Mittelklick: Block aufnehmen',
+    view: 'Linke Maus: drehen · Rechte Maus: verschieben · Mittelklick: Block aufnehmen · Klick auf Knopf/Hebel: auslösen',
     build: '<b>Rechtsklick</b> platzieren · <b>Linksklick</b> abbauen · <b>Mittelklick</b> Pipette',
     box: '<b>Linksklick</b>: Ecke auf Block · <b>Rechtsklick</b>: Ecke davor · <b>Enter</b> füllen · <b>Entf</b> leeren',
     afk: '<b>Klicke</b> auf den Block, auf dem du AFK stehst',

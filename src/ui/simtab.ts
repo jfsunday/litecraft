@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { PLANT_LABEL } from '../sim/plants';
 import { button, field, fmt, h, icon, setChildren, toast } from './dom';
 import type { Tab } from './panels';
+import { redstoneSection } from './redstone';
 
 const opt = (v: string, label: string, sel = false) => h('option', { value: v, selected: sel }, label);
 
@@ -13,6 +14,7 @@ function table(rows: [string, string, string?][], heads: [string, string, string
 
 export function simTab(app: App): Tab {
   const sim = app.sim;
+  const redstone = redstoneSection(app);
   // ---------------------------------------------------------------- plants
   let harvest: 'instant' | 'interval' = 'instant';
   const interval = h('input', { type: 'number', min: '1', max: '240', value: '20' });
@@ -155,6 +157,7 @@ export function simTab(app: App): Tab {
   })();
 
   const el = h('div', null,
+    redstone.el,
     h('div', { class: 'section' }, h('h3', null, icon('sprout', 14), 'Pflanzen-Farm'),
       plantSummary,
       h('div', { style: 'margin-top:10px' }, h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Ernte'), harvestSeg)),
@@ -178,6 +181,6 @@ export function simTab(app: App): Tab {
   );
   return {
     id: 'sim', label: 'Simulation', icon: 'flask', el, on: ['world', 'afk'],
-    refresh: () => { if (app.locked) return; renderPlantSummary(); renderAfk(); renderSpots(); },
+    refresh: () => { redstone.refresh(); if (app.locked) return; renderPlantSummary(); renderAfk(); renderSpots(); },
   };
 }

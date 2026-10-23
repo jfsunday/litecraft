@@ -27,6 +27,25 @@ export class Editor {
     window.addEventListener('keydown', (e) => this.onKey(e, true));
     window.addEventListener('keyup', (e) => this.onKey(e, false));
     window.addEventListener('blur', () => app.view.keys.clear());
+    window.addEventListener('paste', (e) => {
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      if (this.typing(e.target) || !text.trim()) return;
+      e.preventDefault();
+      app.pasteText(text);
+    });
+    window.addEventListener('copy', (e) => {
+      if (this.typing(e.target) || window.getSelection()?.toString()) return;
+      const text = app.selectionClip();
+      if (!text) { toast('Zum Kopieren erst mit dem Box-Werkzeug (G) einen Bereich auswählen.', 'info', 2600); return; }
+      e.preventDefault();
+      e.clipboardData?.setData('text/plain', text);
+      toast('Auswahl kopiert – mit Strg+V einfügen (auch in anderen Tabs).', 'ok', 2600);
+    });
+  }
+
+  private typing(t: EventTarget | null): boolean {
+    const el = t as HTMLElement | null;
+    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable || !!document.querySelector('.modal-root'));
   }
 
   update() {
@@ -114,6 +133,7 @@ export class Editor {
     if (button === 1) { this.pick(h); return; }
     switch (app.mode) {
       case 'view':
+        if (button === 0 && !h.floor) app.redstone.interact(h.x, h.y, h.z);
         break;
       case 'build':
         if (button === 0 && !h.floor) app.edit(breakChanges(app.world, app.reg, h.x, h.y, h.z));
@@ -149,9 +169,7 @@ export class Editor {
   }
 
   private onKey(e: KeyboardEvent, down: boolean) {
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-    if (document.querySelector('.modal-root')) return;
+    if (this.typing(e.target)) return;
     const app = this.app;
     const k = e.key.toLowerCase();
     if (['w', 'a', 's', 'd', ' ', 'shift', 'control'].includes(k) && !e.metaKey && !(e.ctrlKey && k !== 'control')) {

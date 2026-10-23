@@ -11,6 +11,7 @@
 - **Farm simulation**
   - *Plants*: event-driven random-tick simulation using the Java Edition growth rules (hydration, row penalty, light, stems and fruit spots, cane/cactus/bamboo/kelp columns, nether wart, cocoa, berries), observer vs. interval harvesting, an efficiency heatmap and a live 3D timelapse
   - *Mobs*: Monte Carlo of the Java `NaturalSpawner` (pack spawning, 24/128 radius, light rules, per-mob hitboxes, heightmap y-range, mob cap, random despawn) in an ideal world. Mob AI is approximated by an average time-to-kill
+- **Redstone & note block songs**: paste structures as JSON (Ctrl+V, e.g. from the [note block generator](https://jfsunday.github.io/noteblock-music/)) or copy a box selection (Ctrl+C). A tick-accurate redstone simulation (Java rules: dust, repeaters with locking, comparators, torches, buttons, levers) plays note blocks with the original sounds, loaded once from your own Minecraft assets folder (or a synth fallback), with a live glow overlay
 - Material list with stacks and shulker boxes, light levels, spawnable-space overlay and spawn heatmap
 
 UI language is German.
@@ -20,7 +21,7 @@ UI language is German.
 ```bash
 npm install
 npm run dev        # http://localhost:7668
-npm test           # NBT / litematic / schem round trips
+npm test           # NBT / litematic / schem round trips, clipboard, redstone timing
 npm run build
 ```
 

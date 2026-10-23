@@ -5,19 +5,21 @@ import { DEMOS } from './demos/demos';
 import { History } from './editor/history';
 import type { Change } from './editor/placement';
 import { shapeUpdates } from './editor/placement';
-import type { Hit } from './editor/raycast';
+import { FACE_NORMALS, type Hit } from './editor/raycast';
 import { exportLitematic, exportSchem, type ExportOptions, importFile, MC_VERSIONS } from './formats';
+import { type ClipStructure, clipChanges, clipFromWorld, clipToText, type NoteblockMeta, parseClip, shiftNoteblock } from './formats/clipboard';
 import { gunzip, isGzip } from './nbt/nbt';
 import { View } from './render/view';
 import { SimController } from './sim/controller';
+import { RedstonePlayer } from './sim/player';
 import { BlockIcons } from './ui/blockicons';
 import { download, toast } from './ui/dom';
 import { idbGet, idbSet } from './util/idb';
-import { World } from './world/world';
+import { type Bounds, posKey, World } from './world/world';
 
 export type Mode = 'view' | 'build' | 'box' | 'afk';
 export type LayerMode = 'all' | 'below' | 'only';
-type EventName = 'world' | 'selected' | 'mode' | 'hover' | 'textures' | 'layer' | 'meta' | 'history' | 'box' | 'afk' | 'loading';
+type EventName = 'world' | 'selected' | 'mode' | 'hover' | 'textures' | 'layer' | 'meta' | 'history' | 'box' | 'afk' | 'loading' | 'redstone';
 
 const AUTOSAVE_KEY = 'autosave-v1';
 const DEFAULT_HOTBAR = ['grass_block[snowy=false]', 'stone_bricks', 'oak_planks', 'glass', 'oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]', 'oak_slab[type=bottom,waterlogged=false]', 'torch', 'water[level=0]', 'hopper[enabled=true,facing=down]'].map((s) => 'minecraft:' + s);
@@ -29,6 +31,9 @@ export class App {
   readonly history = new History(this.world);
   readonly icons: BlockIcons;
   readonly sim: SimController;
+  readonly redstone: RedstonePlayer;
+  /** Note block metadata of the last pasted song (world coordinates). */
+  song: NoteblockMeta | null = null;
   mode: Mode = 'view';
   hotbar = [...DEFAULT_HOTBAR];
   hotIndex = 1;
@@ -37,7 +42,7 @@ export class App {
   layer: { mode: LayerMode; y: number } = { mode: 'all', y: 0 };
   stack: PackStack = { base: null, overlays: [] };
   packLoading: { label: string; progress: number } | null = null;
-  locked = false; // true while a timelapse is running
+  locked = false; // true while a timelapse or redstone playback is running
   /** Hooks into the UI layer (dialogs etc.), wired up in main.ts. */
   ui: { exportDialog?: () => void; openFile?: () => void; help?: () => void; textures?: () => void; pickAfk?: () => void; addPack?: () => void } = {};
   private listeners = new Map<EventName, Set<() => void>>();
@@ -48,6 +53,7 @@ export class App {
     this.view = new View(canvas, this.world, this.reg);
     this.icons = new BlockIcons(this.view.lib);
     this.sim = new SimController(this);
+    this.redstone = new RedstonePlayer(this);
     this.history.onChange = () => this.emit('history');
     this.world.onChange(() => {
       if (this.worldEventQueued) return;
@@ -88,7 +94,7 @@ export class App {
   setSlot(i: number) { this.hotIndex = Math.max(0, Math.min(8, i)); this.emit('selected'); }
 
   setMode(m: Mode) {
-    if (this.locked && m !== 'view') { toast('Während der Zeitraffer-Simulation ist Bearbeiten gesperrt.', 'warn'); return; }
+    if (this.locked && m !== 'view') { toast('Während einer laufenden Simulation ist Bearbeiten gesperrt.', 'warn'); return; }
     this.mode = m;
     if (m !== 'box') this.clearBox();
     this.canvas.className = `view mode-${m}`;
@@ -143,6 +149,52 @@ export class App {
     toast(`${n.toLocaleString('de-DE')} Blöcke ${kind === 'clear' ? 'entfernt' : 'gesetzt'}`, 'ok', 2000);
   }
 
+  // ---- clipboard ---------------------------------------------------------------
+
+  /** Box selection in the clipboard format, or null without a selection. */
+  selectionClip(): string | null {
+    const bb = this.boxBounds();
+    if (!bb) return null;
+    if ((bb.max[0] - bb.min[0] + 1) * (bb.max[1] - bb.min[1] + 1) * (bb.max[2] - bb.min[2] + 1) > 2_000_000) { toast('Auswahl zu groß (max. 2 Mio. Blöcke)', 'warn'); return null; }
+    return clipToText(clipFromWorld(this.world, bb.min, bb.max, this.world.meta.name || 'Auswahl'));
+  }
+
+  /** Where a paste goes: next to the hovered face (like placing a block), else on top of / at the origin. */
+  private pasteOrigin(b: Bounds | null): [number, number, number] {
+    const h = this.hover;
+    if (h) { const n = FACE_NORMALS[h.face]; return [h.x + n[0], h.y + n[1], h.z + n[2]]; }
+    return b ? [b.min[0], b.max[1] + 1, b.min[2]] : [0, 0, 0];
+  }
+
+  /** Pastes clipboard JSON (format "litecraft-structure") as one undo step. */
+  pasteText(text: string): boolean {
+    if (this.locked) { toast('Während einer laufenden Simulation ist Bearbeiten gesperrt.', 'warn'); return false; }
+    let clip: ClipStructure;
+    try { clip = parseClip(text); } catch (e) { toast(`Einfügen nicht möglich: ${(e as Error).message}`, 'warn', 5000); return false; }
+    const before = this.world.bounds();
+    const origin = this.pasteOrigin(before);
+    const changes = clipChanges(this.world, clip, origin);
+    const n = this.history.apply(changes);
+    // Pasted blocks keep their exact states; only the surrounding blocks get connection updates.
+    const inside = new Set(changes.map((c) => posKey(c.x, c.y, c.z)));
+    const edge = changes.filter((c) => FACE_NORMALS.some(([dx, dy, dz]) => !inside.has(posKey(c.x + dx, c.y + dy, c.z + dz)))).map((c): [number, number, number] => [c.x, c.y, c.z]);
+    const upd = shapeUpdates(this.world, this.reg, edge).filter((c) => !inside.has(posKey(c.x, c.y, c.z)));
+    if (upd.length && this.history.apply(upd) && n) this.history.mergeLast();
+    if (clip.noteblock) this.song = shiftNoteblock(clip.noteblock, origin);
+    const b = this.world.bounds();
+    if (!before && b) {
+      this.world.meta.name = clip.name;
+      this.view.gridY = b.min[1];
+      this.layer = { mode: 'all', y: b.max[1] };
+      this.view.fit(b);
+      this.emit('meta');
+      this.emit('layer');
+    }
+    toast(`„${clip.name}“ eingefügt · ${clip.size.join(' × ')} · ${n.toLocaleString('de-DE')} Blöcke${clip.noteblock ? ' – klicke auf den Startknopf oder spiele ihn unter „Simulation“ ab' : ''}`, 'ok', 6000);
+    this.emit('redstone');
+    return true;
+  }
+
   // ---- layers ----------------------------------------------------------------
 
   setLayer(mode: LayerMode, y = this.layer.y) {
@@ -163,6 +215,8 @@ export class App {
     this.history.clear();
     this.clearBox();
     this.sim.reset();
+    this.redstone.stop();
+    this.song = null;
     const b = this.world.bounds();
     this.view.gridY = b ? b.min[1] : 0;
     this.layer = { mode: 'all', y: b ? b.max[1] : 0 };

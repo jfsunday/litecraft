@@ -98,7 +98,7 @@ export class View {
   gridY = 0;
   private last = performance.now();
   private needsRender = true;
-  onFrame?: (dt: number) => void;
+  private frameFns = new Set<(dt: number) => void>();
   pendingChunks = 0;
 
   constructor(readonly canvas: HTMLCanvasElement, readonly world: World, readonly reg: BlockRegistry) {
@@ -162,6 +162,12 @@ export class View {
 
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement ?? canvas);
     this.resize();
+  }
+
+  /** Registers a callback that runs every frame before rendering. */
+  onFrame(fn: (dt: number) => void): () => void {
+    this.frameFns.add(fn);
+    return () => this.frameFns.delete(fn);
   }
 
   /** Rendering happens on demand: camera movement, world changes or an explicit request. */
@@ -339,7 +345,7 @@ export class View {
     this.last = now;
     this.moveWithKeys(dt);
     if (this.controls.update()) this.needsRender = true;
-    this.onFrame?.(dt);
+    for (const fn of this.frameFns) fn(dt);
     this.processQueue(12);
     if (this.bank.flush()) this.needsRender = true;
     this.updateGrid();

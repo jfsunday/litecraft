@@ -165,7 +165,7 @@ export class SimController {
     this.spheres.add(circle(24, 'y', 0xef4444, 0.7), circle(24, 'x', 0xef4444, 0.35), circle(24, 'z', 0xef4444, 0.35), circle(128, 'y', 0x94a3b8, 0.35), circle(128, 'x', 0x94a3b8, 0.15), circle(128, 'z', 0x94a3b8, 0.15));
     this.spheres.visible = false;
     this.group.add(this.afkMarker, this.spheres);
-    app.view.onFrame = (dt) => this.timelapse?.frame(dt);
+    app.view.onFrame((dt) => this.timelapse?.frame(dt));
     app.on('layer', () => {
       if (this.showHeat) this.buildHeat();
       if (this.showSpawns) this.buildSpawns(this.spawnHeat ?? undefined);
@@ -297,6 +297,7 @@ export class SimController {
     this.stopTimelapse();
     const plants = this.analyzePlants().filter((p) => p.valid);
     if (!plants.length) return false;
+    this.app.redstone.stop();
     this.app.setMode('view');
     this.app.locked = true;
     this.timelapse = new Timelapse(this.app, plants, opts);
