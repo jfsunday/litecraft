@@ -70,10 +70,15 @@ const loop = () => {
 requestAnimationFrame(loop);
 
 void app.start().then(() => {
-  let seen = false;
-  try { seen = !!localStorage.getItem('litecraft-seen'); localStorage.setItem('litecraft-seen', '1'); } catch { /* ignore */ }
-  if (!seen && !app.packLabel()) {
-    toast('Tipp: Lade deine Minecraft-Jar für Original-Texturen – sie bleibt lokal in deinem Browser.', 'info', 9000, { label: 'Texturen laden', run: () => texturesDialog(app) });
+  if (app.packLabel()) return;
+  let declined = false;
+  try { declined = !!localStorage.getItem('litecraft-no-autoload'); } catch { /* ignore */ }
+  const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+  if (!declined && !saveData && !narrow()) {
+    toast('Lade Original-Texturen direkt von Mojang (ca. 40 MB, nur einmal) …', 'info', 8000, { label: 'Abbrechen', run: () => app.cancelMojang() });
+    void app.loadMojang();
+  } else {
+    toast('Original-Minecraft-Texturen gefällig? Werden einmalig von Mojang geladen und gespeichert.', 'info', 9000, { label: 'Laden', run: () => void app.loadMojang() });
   }
 });
 

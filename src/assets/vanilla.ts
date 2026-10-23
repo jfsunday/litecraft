@@ -57,8 +57,42 @@ async function sampleColormap(bytes: Uint8Array): Promise<number | undefined> {
   }
 }
 
+const MANIFEST = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json';
+
+export async function mojangReleases(): Promise<{ latest: string; releases: string[] }> {
+  const m = await (await fetch(MANIFEST)).json() as { latest: { release: string }; versions: { id: string; type: string }[] };
+  return { latest: m.latest.release, releases: m.versions.filter((v) => v.type === 'release').slice(0, 15).map((v) => v.id) };
+}
+
+/** Downloads the official client jar straight from Mojang's servers (the same files the launcher uses). */
+export async function downloadClientJar(version: string | null, onProgress?: (p: number) => void, signal?: AbortSignal): Promise<{ bytes: Uint8Array; version: string }> {
+  const m = await (await fetch(MANIFEST, { signal })).json() as { latest: { release: string }; versions: { id: string; url: string }[] };
+  const id = version ?? m.latest.release;
+  const entry = m.versions.find((v) => v.id === id);
+  if (!entry) throw new Error(`Version ${id} nicht gefunden`);
+  const meta = await (await fetch(entry.url, { signal })).json() as { downloads: { client: { url: string; size: number } } };
+  const res = await fetch(meta.downloads.client.url, { signal });
+  if (!res.ok || !res.body) throw new Error(`Download fehlgeschlagen (${res.status})`);
+  const total = meta.downloads.client.size;
+  const bytes = new Uint8Array(total);
+  const reader = res.body.getReader();
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes.set(value, got);
+    got += value.length;
+    onProgress?.(got / total);
+  }
+  return { bytes: got === total ? bytes : bytes.subarray(0, got), version: id };
+}
+
 export async function readPackFile(file: File, onProgress?: (p: number) => void): Promise<PackData> {
-  const buf = new Uint8Array(await file.arrayBuffer());
+  return readPackBytes(new Uint8Array(await file.arrayBuffer()), file.name, onProgress);
+}
+
+export async function readPackBytes(buf: Uint8Array, filename: string, onProgress?: (p: number) => void): Promise<PackData> {
+  const file = { name: filename };
   const entries = listZip(buf).filter((e) => e.name.startsWith(PREFIX) && e.size > 0);
   const wanted = entries.filter((e) => {
     const n = e.name.slice(PREFIX.length);
@@ -69,7 +103,7 @@ export async function readPackFile(file: File, onProgress?: (p: number) => void)
   });
   if (!wanted.length) throw new Error('Keine Minecraft-Block-Assets gefunden. Wähle eine Client-.jar oder ein Resourcepack (.zip).');
   const isJar = /\.jar$/i.test(file.name) || wanted.filter((e) => e.name.includes('/blockstates/')).length > 500;
-  const pack: PackData = { label: file.name.replace(/\.(jar|zip)$/i, ''), kind: isJar ? 'jar' : 'pack', blockstates: {}, models: {}, textures: {}, colormaps: {} };
+  const pack: PackData = { label: file.name.replace(/\.(jar|zip)$/i, '').replace(/§./g, '').trim(), kind: isJar ? 'jar' : 'pack', blockstates: {}, models: {}, textures: {}, colormaps: {} };
   const dec = new TextDecoder();
   let done = 0;
   const BATCH = 48;

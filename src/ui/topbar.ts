@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { mojangReleases } from '../assets/vanilla';
 import { DATA_MC_VERSION } from '../blocks/data';
 import { DEMOS } from '../demos/demos';
 import { IMPORT_ACCEPT, MC_VERSIONS } from '../formats';
@@ -79,6 +80,8 @@ export function texturesDialog(app: App) {
   const packInput = h('input', { type: 'file', accept: '.zip', multiple: true, style: 'display:none' });
   const list = h('div', { class: 'stack' });
   const progress = h('div', { class: 'progress', style: 'display:none' }, h('i'));
+  const versionSel = h('select', { class: 'input', style: 'width:130px', title: 'Minecraft-Version' }, h('option', { value: '' }, 'Neueste'));
+  void mojangReleases().then((r) => versionSel.append(...r.releases.map((v) => h('option', { value: v }, v)))).catch(() => undefined);
   const render = () => {
     list.innerHTML = '';
     const s = app.stack;
@@ -94,9 +97,10 @@ export function texturesDialog(app: App) {
   packInput.addEventListener('change', async () => { for (const f of Array.from(packInput.files ?? [])) await app.loadPack(f); packInput.value = ''; });
   render();
   const m = modal('Texturen & Resourcepacks', [
-    h('p', { class: 'muted', style: 'margin-top:0' }, 'LiteCraft liest Texturen und Block-Modelle direkt aus deiner eigenen Minecraft-Installation. Die Dateien bleiben in deinem Browser (lokaler Cache) und werden nirgends hochgeladen.'),
+    h('p', { class: 'muted', style: 'margin-top:0' }, 'Original-Texturen und Block-Modelle kommen direkt vom offiziellen Mojang-Server (wie im Launcher) und werden im Browser gespeichert. Resourcepacks (.zip) legst du einfach obendrauf – auch per Drag & Drop. Nichts wird hochgeladen.'),
     list, progress,
-    h('div', { class: 'row', style: 'margin:12px 0 4px' }, button('Minecraft-Jar laden', 'cube', () => jarInput.click(), { class: 'primary' }), button('Resourcepack hinzufügen', 'palette', () => packInput.click(), { class: 'outline' })),
+    h('div', { class: 'row', style: 'margin:12px 0 4px' }, versionSel, button('Von Mojang laden', 'sparkles', () => void app.loadMojang(versionSel.value || null), { class: 'primary' })),
+    h('div', { class: 'row wrap', style: 'margin:6px 0 4px' }, button('Resourcepack (.zip) hinzufügen', 'palette', () => packInput.click(), { class: 'outline' }), button('Eigene Jar wählen', 'cube', () => jarInput.click(), { class: 'outline' })),
     h('details', { class: 'small muted', style: 'margin-top:10px' },
       h('summary', { style: 'cursor:pointer' }, 'Wo finde ich die Jar?'),
       h('ul', { style: 'padding-left:18px;line-height:1.7' },
@@ -113,6 +117,9 @@ export function buildTopbar(app: App, toggles: { left: () => void; right: () => 
   const fileInput = h('input', { type: 'file', accept: `${IMPORT_ACCEPT},.jar,.zip`, multiple: true, style: 'display:none' });
   fileInput.addEventListener('change', () => { if (fileInput.files?.length) void app.importFiles(fileInput.files); fileInput.value = ''; });
   app.ui.openFile = () => fileInput.click();
+  const packInput = h('input', { type: 'file', accept: '.zip,.jar', multiple: true, style: 'display:none' });
+  packInput.addEventListener('change', async () => { for (const f of Array.from(packInput.files ?? [])) await app.loadPack(f); packInput.value = ''; });
+  app.ui.addPack = () => packInput.click();
 
   const title = h('input', { class: 'title-input', value: app.world.meta.name, title: 'Name der Struktur', maxLength: 80, spellcheck: false });
   title.addEventListener('change', () => { app.world.meta.name = title.value.trim() || 'Unbenannt'; app.saveMeta(); });
@@ -134,7 +141,9 @@ export function buildTopbar(app: App, toggles: { left: () => void; right: () => 
     }, 'Struktur steckt im Link'),
     item('camera', 'Screenshot speichern', async () => download(await app.view.screenshot(), `${app.world.meta.name || 'litecraft'}.png`)),
     'sep',
-    item('palette', 'Texturen & Resourcepacks…', () => texturesDialog(app)),
+    item('sparkles', 'Original-Texturen von Mojang laden', () => void app.loadMojang(), 'einmalig ~40 MB, danach gespeichert'),
+    item('palette', 'Resourcepack hinzufügen…', () => packInput.click(), '.zip – auch per Drag & Drop'),
+    item('sliders', 'Texturen verwalten…', () => texturesDialog(app)),
   ]);
   const demoMenu = menu('Beispiele', [
     h('div', { class: 'menu-title' }, 'Beispiel-Strukturen'),
@@ -169,6 +178,6 @@ export function buildTopbar(app: App, toggles: { left: () => void; right: () => 
     h('button', { class: 'icon-btn', type: 'button', title: 'Block-Palette ein/aus', on: { click: toggles.left } }, icon('panel-left')),
     h('button', { class: 'icon-btn', type: 'button', title: 'Seitenleiste ein/aus', on: { click: toggles.right } }, icon('panel-right')),
     h('button', { class: 'icon-btn', type: 'button', title: 'Hilfe (H)', on: { click: helpDialog } }, icon('help')),
-    fileInput,
+    fileInput, packInput,
   );
 }

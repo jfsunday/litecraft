@@ -268,7 +268,7 @@ function viewTab(app: App): Tab {
   const fov = h('input', { type: 'range', min: '30', max: '100', value: String(v.camera.fov) });
   fov.addEventListener('input', () => { v.camera.fov = Number(fov.value); v.camera.updateProjectionMatrix(); });
   const el = h('div', null,
-    h('div', { class: 'section' }, h('h3', null, icon('palette', 14), 'Texturen'), packInfo, h('div', { class: 'row', style: 'margin-top:8px' }, button('Texturen verwalten…', 'palette', () => texturesDialog(app), { class: 'outline block' }))),
+    h('div', { class: 'section' }, h('h3', null, icon('palette', 14), 'Texturen'), packInfo, h('div', { class: 'row wrap', style: 'margin-top:8px' }, app.packLabel() ? null : button('Von Mojang laden', 'sparkles', () => void app.loadMojang(), { class: 'primary' }), button('Resourcepack (.zip)', 'palette', () => app.ui.addPack?.(), { class: 'outline' }), button('Verwalten…', 'sliders', () => texturesDialog(app), { class: 'outline' }))),
     h('div', { class: 'section' }, h('h3', null, icon('sun', 14), 'Darstellung'),
       seg([['night', 'Nacht'], ['day', 'Tag']], v.theme, (t) => { v.setTheme(t); localStorage.setItem('litecraft-theme', t); }),
       toggle('Raster', v.showGrid, (on) => { v.showGrid = on; }),

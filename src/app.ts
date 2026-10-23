@@ -1,4 +1,4 @@
-import { addToStack, clearCachedStack, loadCachedStack, type PackStack, readPackFile, saveStack, stackLabel, VanillaResolver } from './assets/vanilla';
+import { addToStack, clearCachedStack, downloadClientJar, loadCachedStack, type PackStack, readPackBytes, readPackFile, saveStack, stackLabel, VanillaResolver } from './assets/vanilla';
 import { DATA_VERSION } from './blocks/data';
 import { BlockRegistry } from './blocks/info';
 import { DEMOS } from './demos/demos';
@@ -39,7 +39,7 @@ export class App {
   packLoading: { label: string; progress: number } | null = null;
   locked = false; // true while a timelapse is running
   /** Hooks into the UI layer (dialogs etc.), wired up in main.ts. */
-  ui: { exportDialog?: () => void; openFile?: () => void; help?: () => void; textures?: () => void; pickAfk?: () => void } = {};
+  ui: { exportDialog?: () => void; openFile?: () => void; help?: () => void; textures?: () => void; pickAfk?: () => void; addPack?: () => void } = {};
   private listeners = new Map<EventName, Set<() => void>>();
   private saveTimer = 0;
   private worldEventQueued = false;
@@ -304,6 +304,37 @@ export class App {
       this.packLoading = null;
       this.emit('loading');
     }
+  }
+
+  private mojangAbort: AbortController | null = null;
+
+  /** Fetches the official client jar from Mojang (no file picking), then caches the extracted assets. */
+  async loadMojang(version: string | null = null) {
+    if (this.packLoading) return;
+    const ctrl = new AbortController();
+    this.mojangAbort = ctrl;
+    const label = version ? `Minecraft ${version}` : 'Minecraft';
+    const progress = (p: number) => { this.packLoading = { label, progress: p }; this.emit('loading'); };
+    progress(0);
+    try {
+      const { bytes, version: v } = await downloadClientJar(version, (p) => progress(p * 0.75), ctrl.signal);
+      const pack = await readPackBytes(bytes, `Minecraft ${v}.jar`, (p) => progress(0.75 + p * 0.25));
+      const next = addToStack(this.stack, pack);
+      this.applyStack(next);
+      await saveStack(next);
+      toast(`Original-Texturen von Minecraft ${v} geladen und gespeichert.`, 'ok', 5000);
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') toast(`Download von Mojang fehlgeschlagen: ${(e as Error).message}`, 'error', 7000);
+    } finally {
+      this.packLoading = null;
+      this.mojangAbort = null;
+      this.emit('loading');
+    }
+  }
+
+  cancelMojang() {
+    this.mojangAbort?.abort();
+    try { localStorage.setItem('litecraft-no-autoload', '1'); } catch { /* ignore */ }
   }
 
   async removePack(index: number | 'base') {
